@@ -30,7 +30,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Objects;
 
-public class GoogleIdTokenValidator {
+class GoogleIdTokenValidator {
   private static final HttpTransport HTTP_TRANSPORT;
   
   static {

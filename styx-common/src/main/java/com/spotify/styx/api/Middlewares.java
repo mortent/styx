@@ -268,8 +268,13 @@ public final class Middlewares {
   }
 
   public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> authValidator() {
+    return authValidator(GOOGLE_ID_TOKEN_VALIDATOR);
+  }
+
+  public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> authValidator(
+      GoogleIdTokenValidator validator) {
     return h -> rc -> {
-      if (!"GET".equals(rc.request().method()) && !auth(rc, GOOGLE_ID_TOKEN_VALIDATOR).user().isPresent()) {
+      if (!"GET".equals(rc.request().method()) && !auth(rc, validator).user().isPresent()) {
         return completedFuture(
             Response.forStatus(Status.UNAUTHORIZED.withReasonPhrase("Unauthorized access")));
       }
