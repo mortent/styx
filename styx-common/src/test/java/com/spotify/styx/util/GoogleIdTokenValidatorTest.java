@@ -1,6 +1,6 @@
 /*-
  * -\-\-
- * Spotify Styx API Service
+ * Spotify Styx Common
  * --
  * Copyright (C) 2018 Spotify AB
  * --
@@ -18,7 +18,7 @@
  * -/-/-
  */
 
-package com.spotify.styx.api;
+package com.spotify.styx.util;
 
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.Matchers.is;

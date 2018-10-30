@@ -1,6 +1,6 @@
 /*-
  * -\-\-
- * Spotify Styx API Service
+ * Spotify Styx Common
  * --
  * Copyright (C) 2018 Spotify AB
  * --
@@ -18,7 +18,7 @@
  * -/-/-
  */
 
-package com.spotify.styx.api;
+package com.spotify.styx.util;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class GoogleIdTokenValidator {
+public class GoogleIdTokenValidator {
 
   private static final Logger logger = LoggerFactory.getLogger(GoogleIdTokenValidator.class);
 
@@ -66,7 +66,7 @@ class GoogleIdTokenValidator {
       .maximumSize(VALIDATED_EMAIL_CACHE_SIZE)
       .build();
 
-  GoogleIdTokenValidator(GoogleIdTokenVerifier idTokenVerifier,
+  public GoogleIdTokenValidator(GoogleIdTokenVerifier idTokenVerifier,
                          CloudResourceManager cloudResourceManager,
                          Iam iam,
                          Set<String> domainWhitelist) {
@@ -77,7 +77,7 @@ class GoogleIdTokenValidator {
     this.domainWhitelist = Objects.requireNonNull(domainWhitelist, "domainWhitelist");
   }
 
-  void cacheProjects() throws IOException {
+  public void cacheProjects() throws IOException {
     final CloudResourceManager.Projects.List request = cloudResourceManager.projects().list();
 
     ListProjectsResponse response;
@@ -95,7 +95,7 @@ class GoogleIdTokenValidator {
     logger.info("project cache loaded");
   }
 
-  GoogleIdToken validate(String token) {
+  public GoogleIdToken validate(String token) {
     final GoogleIdToken googleIdToken;
     try {
       googleIdToken = verifyIdToken(token);
