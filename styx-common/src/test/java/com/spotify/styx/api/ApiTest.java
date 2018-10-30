@@ -23,21 +23,35 @@ import static java.util.stream.Collectors.toList;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.spotify.apollo.Response;
 import com.spotify.apollo.route.AsyncHandler;
+import com.spotify.apollo.route.Middleware;
 import com.spotify.apollo.route.Route;
 import com.spotify.styx.util.ClassEnforcer;
+import com.spotify.styx.util.GoogleIdTokenValidator;
 import java.util.List;
 import okio.ByteString;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
+@RunWith(MockitoJUnitRunner.class)
 public class ApiTest {
 
   private static final List<Route<AsyncHandler<Response<ByteString>>>> ROUTES = ImmutableList.of(
       Route.create("GET", "/foo", rc -> null),
       Route.create("GET", "/bar", rc -> null));
+
+  @Mock private Route<AsyncHandler<Response<ByteString>>> route;
+
+  @Mock private GoogleIdTokenValidator validator;
 
   @Test
   public void shouldNotBeConstructable() throws ReflectiveOperationException {
@@ -55,5 +69,17 @@ public class ApiTest {
         .map(Route::uri)
         .collect(toList());
     assertThat(prefixedUris, is(ImmutableList.of("/api/v3/foo", "/api/v3/bar")));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void shouldHaveCorrectNumberOfMiddlewares() {
+    when(route.withMiddleware(any(Middleware.class))).thenReturn(route);
+
+    final List<Route<AsyncHandler<Response<ByteString>>>> originalRoutes = ImmutableList.of(route);
+    final List<Route<AsyncHandler<Response<ByteString>>>> routes =
+        Api.withCommonMiddleware(originalRoutes.stream(), validator, "test").collect(toList());
+    verify(route, times(5)).withMiddleware(any(Middleware.class));
+    assertThat(routes, is(originalRoutes));
   }
 }
