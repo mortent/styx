@@ -45,6 +45,7 @@ import com.google.cloud.datastore.Datastore;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Closer;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -147,6 +148,7 @@ public class StyxScheduler implements AppInit {
   public static final String STYX_TRIGGER_TICK_INTERVAL = "styx.trigger.tick-interval";
   public static final String STYX_SCHEDULER_THREADS = "styx.scheduler-threads";
   private static final String STYX_ENVIRONMENT = "styx.environment";
+  private static final String STYX_AUTHENTICATION_DOMAIN_WHITELIST = "styx.authentication.domain-whitelist";
 
   public static final int DEFAULT_STYX_EVENT_PROCESSING_THREADS = 32;
   public static final int DEFAULT_STYX_SCHEDULER_THREADS = 32;
@@ -409,10 +411,16 @@ public class StyxScheduler implements AppInit {
     final SchedulerResource schedulerResource =
         new SchedulerResource(stateManager, trigger, storage, time,
             new WorkflowValidator(new DockerImageValidator()));
+    
+    final Set<String> domainWhitelist = 
+        config.hasPath(STYX_AUTHENTICATION_DOMAIN_WHITELIST)
+        ? ImmutableSet.copyOf(config.getStringList(STYX_AUTHENTICATION_DOMAIN_WHITELIST))
+        : ImmutableSet.of();
 
     environment.routingEngine()
         .registerAutoRoute(Route.sync("GET", "/ping", rc -> "pong"))
-        .registerRoutes(Api.withCommonMiddleware(schedulerResource.routes(), serviceName));
+        .registerRoutes(
+            Api.withCommonMiddleware(schedulerResource.routes(), domainWhitelist, serviceName));
 
     this.stateManager = stateManager;
     this.scheduler = scheduler;

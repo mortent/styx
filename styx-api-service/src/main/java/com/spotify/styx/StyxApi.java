@@ -25,6 +25,7 @@ import static com.spotify.styx.util.Connections.createDatastore;
 import static java.util.Objects.requireNonNull;
 
 import com.google.cloud.datastore.Datastore;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Streams;
 import com.google.common.io.Closer;
 import com.spotify.apollo.AppInit;
@@ -58,6 +59,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -74,6 +76,8 @@ public class StyxApi implements AppInit {
 
   public static final String SCHEDULER_SERVICE_BASE_URL = "styx.scheduler.base-url";
   public static final String DEFAULT_SCHEDULER_SERVICE_BASE_URL = "http://localhost:8080";
+
+  private static final String STYX_AUTHENTICATION_DOMAIN_WHITELIST = "styx.authentication.domain-whitelist";
 
   public static final Duration DEFAULT_RETRY_BASE_DELAY_BT = Duration.ofSeconds(1);
 
@@ -187,9 +191,15 @@ public class StyxApi implements AppInit {
         schedulerProxyResource.routes()
     );
 
+    final Set<String> domainWhitelist =
+        config.hasPath(STYX_AUTHENTICATION_DOMAIN_WHITELIST)
+        ? ImmutableSet.copyOf(config.getStringList(STYX_AUTHENTICATION_DOMAIN_WHITELIST))
+        : ImmutableSet.of();
+
     environment.routingEngine()
         .registerAutoRoute(Route.sync("GET", "/ping", rc -> "pong"))
-        .registerRoutes(Api.withCommonMiddleware(routes, clientBlacklistSupplier, serviceName));
+        .registerRoutes(Api.withCommonMiddleware(routes, clientBlacklistSupplier, domainWhitelist,
+            serviceName));
   }
 
   private static AggregateStorage storage(Environment environment, Stats stats) {

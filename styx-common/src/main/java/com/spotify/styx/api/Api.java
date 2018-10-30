@@ -26,14 +26,24 @@ import static com.spotify.styx.api.Middlewares.exceptionAndRequestIdHandler;
 import static com.spotify.styx.api.Middlewares.httpLogger;
 import static com.spotify.styx.api.Middlewares.tracer;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.googleapis.util.Utils;
+import com.google.api.client.http.HttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.services.cloudresourcemanager.CloudResourceManager;
+import com.google.api.services.iam.v1.Iam;
 import com.spotify.apollo.Response;
 import com.spotify.apollo.route.AsyncHandler;
 import com.spotify.apollo.route.Route;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.Tracing;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import okio.ByteString;
@@ -41,6 +51,18 @@ import okio.ByteString;
 public final class Api {
 
   private static final Tracer tracer = Tracing.getTracer();
+  
+  private static final JsonFactory JSON_FACTORY = Utils.getDefaultJsonFactory();
+
+  private static final HttpTransport HTTP_TRANSPORT;
+
+  static {
+    try {
+      HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 
   public enum Version {
     V3;
@@ -48,6 +70,11 @@ public final class Api {
     public String prefix() {
       return "/api/" + name().toLowerCase();
     }
+
+  }
+
+  private Api() {
+    throw new UnsupportedOperationException();
   }
 
   public static Stream<Route<AsyncHandler<Response<ByteString>>>> prefixRoutes(
@@ -58,20 +85,64 @@ public final class Api {
   }
 
   public static Stream<Route<AsyncHandler<Response<ByteString>>>> withCommonMiddleware(
-      Stream<Route<AsyncHandler<Response<ByteString>>>> routes, String service) {
-    return withCommonMiddleware(routes, Collections::emptyList, service);
+      Stream<Route<AsyncHandler<Response<ByteString>>>> routes,
+      Set<String> domainWhitelist,
+      String service) {
+    return withCommonMiddleware(routes, Collections::emptyList, domainWhitelist, service);
   }
 
   public static Stream<Route<AsyncHandler<Response<ByteString>>>> withCommonMiddleware(
       Stream<Route<AsyncHandler<Response<ByteString>>>> routes,
-      Supplier<List<String>> clientBlacklistSupplier, String service) {
+      Supplier<List<String>> clientBlacklistSupplier,
+      Set<String> domainWhitelist,
+      String service) {
+    final GoogleIdTokenValidator validator = createGoogleIdTokenValidator(domainWhitelist, service);
+
     return routes.map(r -> r
-        .withMiddleware(httpLogger())
-        .withMiddleware(authValidator())
+        .withMiddleware(httpLogger(validator))
+        .withMiddleware(authValidator(validator))
         .withMiddleware(clientValidator(clientBlacklistSupplier))
         .withMiddleware(exceptionAndRequestIdHandler())
         .withMiddleware(tracer(tracer, service)));
   }
-  private Api() {
+  
+  private static GoogleIdTokenValidator createGoogleIdTokenValidator(Set<String> domainWhitelist,
+                                                                     String service) {
+    final GoogleIdTokenVerifier idTokenVerifier = new GoogleIdTokenVerifier(HTTP_TRANSPORT, JSON_FACTORY);
+
+    final GoogleCredential credential = getGoogleCredential();
+
+    final CloudResourceManager cloudResourceManager =
+        new CloudResourceManager.Builder(HTTP_TRANSPORT, JSON_FACTORY, credential)
+            .setApplicationName(service)
+            .build();
+
+    final Iam iam = new Iam.Builder(
+        HTTP_TRANSPORT, JSON_FACTORY, credential)
+        .setApplicationName(service)
+        .build();
+
+    try {
+      return new GoogleIdTokenValidator(idTokenVerifier, cloudResourceManager, iam, domainWhitelist);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+  
+  private static GoogleCredential getGoogleCredential() {
+    final GoogleCredential credential;
+
+    try {
+      credential = GoogleCredential.getApplicationDefault();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+
+    if (credential.createScopedRequired()) {
+      return credential.createScoped(
+          Collections.singletonList("https://www.googleapis.com/auth/cloud-platform"));
+    }
+
+    return credential;
   }
 }

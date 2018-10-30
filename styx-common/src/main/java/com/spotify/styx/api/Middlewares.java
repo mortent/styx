@@ -67,7 +67,6 @@ public final class Middlewares {
 
   public static final String BEARER_PREFIX = "Bearer ";
   private static final Set<String> BLACKLISTED_HEADERS = ImmutableSet.of(HttpHeaders.AUTHORIZATION);
-  private static final GoogleIdTokenValidator GOOGLE_ID_TOKEN_VALIDATOR = new GoogleIdTokenValidator();
 
   private static final String REQUEST_ID = "request-id";
   private static final String X_REQUEST_ID = "X-Request-Id";
@@ -171,8 +170,9 @@ public final class Middlewares {
     return CharMatcher.anyOf("\n\r").replaceFrom(reason.toString(), ' ');
   }
 
-  public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> httpLogger() {
-    return httpLogger(LOG, GOOGLE_ID_TOKEN_VALIDATOR);
+  public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> httpLogger(
+      GoogleIdTokenValidator validator) {
+    return httpLogger(LOG, validator);
   }
 
   public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> httpLogger(
@@ -259,10 +259,6 @@ public final class Middlewares {
     return headers.entrySet().stream()
         .collect(Collectors.toMap(Map.Entry::getKey,
             entry -> BLACKLISTED_HEADERS.contains(entry.getKey()) ? "<hidden>" : entry.getValue()));
-  }
-
-  public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> authValidator() {
-    return authValidator(GOOGLE_ID_TOKEN_VALIDATOR);
   }
 
   public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> authValidator(

@@ -255,7 +255,7 @@ public class MiddlewaresTest {
     Request request = Request.forUri("/", "GET");
     when(requestContext.request()).thenReturn(request);
 
-    Response<Object> response = awaitResponse(Middlewares.httpLogger()
+    Response<Object> response = awaitResponse(Middlewares.httpLogger(validator)
         .apply(mockInnerHandler(requestContext))
         .invoke(requestContext));
     assertThat(response, hasStatus(withCode(Status.OK)));
@@ -268,7 +268,7 @@ public class MiddlewaresTest {
         .withPayload(ByteString.encodeUtf8("hello"));
     when(requestContext.request()).thenReturn(request);
 
-    Response<Object> response = awaitResponse(Middlewares.httpLogger()
+    Response<Object> response = awaitResponse(Middlewares.httpLogger(validator)
         .apply(mockInnerHandler(requestContext))
         .invoke(requestContext));
     assertThat(response, hasStatus(withCode(Status.OK)));
@@ -283,7 +283,9 @@ public class MiddlewaresTest {
         .withPayload(ByteString.encodeUtf8("hello"));
     when(requestContext.request()).thenReturn(request);
 
-    Response<Object> response = Middlewares.httpLogger().and(Middlewares.exceptionAndRequestIdHandler())
+    when(validator.validate(anyString())).thenThrow(new IllegalArgumentException());
+
+    Response<Object> response = Middlewares.httpLogger(validator).and(Middlewares.exceptionAndRequestIdHandler())
         .apply(mockInnerHandler(requestContext))
         .invoke(requestContext)
         .toCompletableFuture().get(5, SECONDS);
@@ -457,7 +459,7 @@ public class MiddlewaresTest {
     Request request = Request.forUri("/", "GET");
     when(requestContext.request()).thenReturn(request);
 
-    Response<Object> response = awaitResponse(Middlewares.authValidator()
+    Response<Object> response = awaitResponse(Middlewares.authValidator(validator)
                                                   .apply(mockInnerHandler(requestContext))
                                                   .invoke(requestContext));
     assertThat(response, hasStatus(withCode(Status.OK)));
@@ -470,7 +472,7 @@ public class MiddlewaresTest {
         .withPayload(ByteString.encodeUtf8("hello"));
     when(requestContext.request()).thenReturn(request);
 
-    Response<Object> response = awaitResponse(Middlewares.authValidator()
+    Response<Object> response = awaitResponse(Middlewares.authValidator(validator)
                                                   .apply(mockInnerHandler(requestContext))
                                                   .invoke(requestContext));
     assertThat(response, hasStatus(withCode(Status.UNAUTHORIZED)));
