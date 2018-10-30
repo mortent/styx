@@ -55,7 +55,6 @@ import okio.ByteString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import sun.security.krb5.internal.AuthContext;
 
 /**
  * A collection of static methods implementing the apollo Middleware interface, useful for
@@ -186,7 +185,7 @@ public final class Middlewares {
                "GET".equals(request.method()) ? "" : "[AUDIT] ",
                request.method(),
                request.uri(),
-               auth(requestContext, validator).user().map(idToken -> idToken.getPayload()
+               auth(requestContext, validator).map(idToken -> idToken.getPayload()
                    .getEmail())
                    .orElse("anonymous"),
                hideSensitiveHeaders(request.headers()),
