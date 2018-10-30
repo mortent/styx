@@ -34,6 +34,7 @@ import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.services.cloudresourcemanager.CloudResourceManager;
 import com.google.api.services.iam.v1.Iam;
+import com.google.api.services.iam.v1.IamScopes;
 import com.spotify.apollo.Response;
 import com.spotify.apollo.route.AsyncHandler;
 import com.spotify.apollo.route.Route;
@@ -122,27 +123,21 @@ public final class Api {
         .setApplicationName(service)
         .build();
 
+    final GoogleIdTokenValidator validator =
+        new GoogleIdTokenValidator(idTokenVerifier, cloudResourceManager, iam, domainWhitelist);
     try {
-      return new GoogleIdTokenValidator(idTokenVerifier, cloudResourceManager, iam, domainWhitelist);
+      validator.cacheProjects();
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+    return validator;
   }
   
   private static GoogleCredential getGoogleCredential() {
-    final GoogleCredential credential;
-
     try {
-      credential = GoogleCredential.getApplicationDefault();
+      return GoogleCredential.getApplicationDefault().createScoped(IamScopes.all());
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
-
-    if (credential.createScopedRequired()) {
-      return credential.createScoped(
-          Collections.singletonList("https://www.googleapis.com/auth/cloud-platform"));
-    }
-
-    return credential;
   }
 }

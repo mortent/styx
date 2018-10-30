@@ -2,7 +2,7 @@
  * -\-\-
  * Spotify Styx API Service
  * --
- * Copyright (C) 2016 Spotify AB
+ * Copyright (C) 2018 Spotify AB
  * --
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,14 +42,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class GoogleIdTokenValidator {
-  
+
   private static final Logger logger = LoggerFactory.getLogger(GoogleIdTokenValidator.class);
 
   private static final Pattern EMAIL_PATTERN = Pattern.compile("^.+@(.+)$");
 
   private static final Pattern SERVICE_ACCOUNT_PATTERN =
       Pattern.compile("^.+@(.+)\\.iam\\.gserviceaccount\\.com$");
-  
+
   private static final long VALIDATED_EMAIL_CACHE_SIZE = 1000;
 
   private final GoogleIdTokenVerifier idTokenVerifier;
@@ -57,40 +57,69 @@ class GoogleIdTokenValidator {
   private final CloudResourceManager cloudResourceManager;
 
   private final Iam iam;
-  
+
   private final Set<String> domainWhitelist;
 
   private final Set<String> projectCache = Sets.newConcurrentHashSet();
-  
-  private final Cache<String, String> validatedEmailCache  = CacheBuilder.newBuilder()
+
+  private final Cache<String, String> validatedEmailCache = CacheBuilder.newBuilder()
       .maximumSize(VALIDATED_EMAIL_CACHE_SIZE)
       .build();
 
-  @VisibleForTesting
   GoogleIdTokenValidator(GoogleIdTokenVerifier idTokenVerifier,
                          CloudResourceManager cloudResourceManager,
                          Iam iam,
-                         Set<String> domainWhitelist) throws IOException {
+                         Set<String> domainWhitelist) {
     this.idTokenVerifier = Objects.requireNonNull(idTokenVerifier, "idTokenVerifier");
     this.cloudResourceManager =
         Objects.requireNonNull(cloudResourceManager, "cloudResourceManager");
     this.iam = Objects.requireNonNull(iam, "iam");
     this.domainWhitelist = Objects.requireNonNull(domainWhitelist, "domainWhitelist");
+  }
 
-    cacheProjects();
+  void cacheProjects() throws IOException {
+    final CloudResourceManager.Projects.List request = cloudResourceManager.projects().list();
+
+    ListProjectsResponse response;
+    do {
+      response = request.execute();
+      if (response.getProjects() == null) {
+        continue;
+      }
+      for (Project project : response.getProjects()) {
+        projectCache.add(project.getProjectId());
+      }
+      request.setPageToken(response.getNextPageToken());
+    } while (response.getNextPageToken() != null);
+
     logger.info("project cache loaded");
   }
 
   GoogleIdToken validate(String token) {
-    final GoogleIdToken googleIdToken = verifyIdToken(token);
+    final GoogleIdToken googleIdToken;
+    try {
+      googleIdToken = verifyIdToken(token);
+    } catch (IOException e) {
+      logger.warn("failed to verify token");
+      return null;
+    }
+
     if (googleIdToken == null) {
       return null;
     }
 
     final String email = googleIdToken.getPayload().getEmail();
 
-    if (checkDomainWhitelist(email)) {
-      return googleIdToken;
+    final Matcher matcher = EMAIL_PATTERN.matcher(email);
+    if (matcher.matches()) {
+      final String domain = matcher.group(1);
+      if (domainWhitelist.contains(domain)) {
+        logger.debug("domain {} in whitelist", domain);
+        return googleIdToken;
+      }
+    } else {
+      logger.warn("invalid email address {}", email);
+      return null;
     }
 
     if (validatedEmailCache.getIfPresent(email) != null) {
@@ -110,45 +139,26 @@ class GoogleIdTokenValidator {
     }
   }
 
-  private GoogleIdToken verifyIdToken(String token) {
+  @VisibleForTesting
+  void clearProjectCache() {
+    projectCache.clear();
+  }
+
+  private GoogleIdToken verifyIdToken(String token) throws IOException {
     try {
       return idTokenVerifier.verify(token);
     } catch (GeneralSecurityException e) {
       return null;
-    } catch (IOException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  private void cacheProjects() throws IOException {
-    final CloudResourceManager.Projects.List request = cloudResourceManager.projects().list();
-
-    ListProjectsResponse response;
-    do {
-      response = request.execute();
-      if (response.getProjects() == null) {
-        continue;
-      }
-      for (Project project : response.getProjects()) {
-        projectCache.add(project.getProjectId());
-      }
-      request.setPageToken(response.getNextPageToken());
-    } while (response.getNextPageToken() != null);
-  }
-  
-  private boolean checkDomainWhitelist(String email) {
-    final Matcher matcher = EMAIL_PATTERN.matcher(email);
-    final String domain = matcher.group(1);
-    if (domain != null) {
-      logger.debug("check domain {} in whitelist", domain);
-      return domainWhitelist.contains(domain);
-    }
-    return false;
-  }
-  
   private String checkProject(String email) throws IOException {
+    String projectId = null;
+
     final Matcher matcher = SERVICE_ACCOUNT_PATTERN.matcher(email);
-    String projectId = matcher.group(1);
+    if (matcher.matches()) {
+      projectId = matcher.group(1);
+    }
 
     if (projectId == null) {
       // no projectId, could be GCE default
@@ -170,7 +180,7 @@ class GoogleIdTokenValidator {
 
     return null;
   }
-  
+
   private String getProjectIdOfServiceAccount(String email) throws IOException {
     try {
       final ServiceAccount serviceAccount =
@@ -186,7 +196,7 @@ class GoogleIdTokenValidator {
       return null;
     }
   }
-  
+
   private boolean checkProjectId(String projectId) throws IOException {
     try {
       cloudResourceManager.projects().get(projectId).execute();

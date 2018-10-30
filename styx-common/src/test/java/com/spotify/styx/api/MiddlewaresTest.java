@@ -54,6 +54,7 @@ import com.spotify.apollo.Status;
 import com.spotify.apollo.request.RequestContexts;
 import com.spotify.apollo.request.RequestMetadataImpl;
 import com.spotify.apollo.route.AsyncHandler;
+import com.spotify.styx.util.ClassEnforcer;
 import com.spotify.styx.util.MockSpan;
 import io.opencensus.trace.SpanBuilder;
 import io.opencensus.trace.Tracer;
@@ -128,6 +129,11 @@ public class MiddlewaresTest {
     // noinspection unchecked
     when(innerHandler.invoke(requestContext)).thenThrow(throwable);
     return innerHandler;
+  }
+
+  @Test
+  public void shouldNotBeConstructable() throws ReflectiveOperationException {
+    assertThat(ClassEnforcer.assertNotInstantiable(Middlewares.class), is(true));
   }
 
   @Test
@@ -291,6 +297,44 @@ public class MiddlewaresTest {
         .toCompletableFuture().get(5, SECONDS);
 
     assertThat(response, hasStatus(withCode(Status.BAD_REQUEST)));
+  }
+
+  @Test
+  public void testAuditLoggingForPutAuthorizationMissingBearerPrefix()
+      throws InterruptedException, ExecutionException, TimeoutException {
+    RequestContext requestContext = mock(RequestContext.class);
+    Request request = Request.forUri("/", "PUT")
+        .withHeader(HttpHeaders.AUTHORIZATION, "broken")
+        .withPayload(ByteString.encodeUtf8("hello"));
+    when(requestContext.request()).thenReturn(request);
+
+    Response<Object> response =
+        Middlewares.httpLogger(validator).and(Middlewares.exceptionAndRequestIdHandler())
+            .apply(mockInnerHandler(requestContext))
+            .invoke(requestContext)
+            .toCompletableFuture().get(5, SECONDS);
+
+    assertThat(response, hasStatus(withCode(Status.BAD_REQUEST)));
+  }
+
+  @Test
+  public void testAuditLoggingForPutFailedToValidate()
+      throws InterruptedException, ExecutionException, TimeoutException {
+    RequestContext requestContext = mock(RequestContext.class);
+    Request request = Request.forUri("/", "PUT")
+        .withHeader(HttpHeaders.AUTHORIZATION, "Bearer foobar")
+        .withPayload(ByteString.encodeUtf8("hello"));
+    when(requestContext.request()).thenReturn(request);
+
+    when(validator.validate(anyString())).thenReturn(null);
+
+    Response<Object> response =
+        Middlewares.httpLogger(validator).and(Middlewares.exceptionAndRequestIdHandler())
+            .apply(mockInnerHandler(requestContext))
+            .invoke(requestContext)
+            .toCompletableFuture().get(5, SECONDS);
+
+    assertThat(response, hasStatus(withCode(Status.UNAUTHORIZED)));
   }
 
   @Test
