@@ -126,17 +126,20 @@ public class GoogleIdTokenValidator {
       return googleIdToken;
     }
 
+    final String projectId;
     try {
-      final String projectId = checkProject(email);
-      if (projectId != null) {
-        validatedEmailCache.put(email, projectId);
-        return googleIdToken;
-      }
-      return null;
+      projectId = checkProject(email);
     } catch (IOException e) {
       logger.info("cannot validate {}", email);
       return null;
     }
+
+    if (projectId != null) {
+      validatedEmailCache.put(email, projectId);
+      return googleIdToken;
+    }
+
+    return null;
   }
 
   @VisibleForTesting
