@@ -40,7 +40,6 @@ import com.spotify.apollo.route.AsyncHandler;
 import com.spotify.apollo.route.Middleware;
 import com.spotify.apollo.route.SyncHandler;
 import com.spotify.styx.util.MDCUtil;
-import io.norberg.automatter.AutoMatter;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.Tracer;
 import java.net.URI;
@@ -56,6 +55,7 @@ import okio.ByteString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import sun.security.krb5.internal.AuthContext;
 
 /**
  * A collection of static methods implementing the apollo Middleware interface, useful for
@@ -225,18 +225,13 @@ public final class Middlewares {
     };
   }
 
-  @AutoMatter
-  public interface AuthContext {
-    Optional<GoogleIdToken> user();
-  }
-
-  private static AuthContext auth(RequestContext requestContext,
-      GoogleIdTokenValidator validator) {
+  private static Optional<GoogleIdToken> auth(RequestContext requestContext,
+                                              GoogleIdTokenValidator validator) {
     final Request request = requestContext.request();
     final boolean hasAuthHeader = request.header(HttpHeaders.AUTHORIZATION).isPresent();
 
     if (!hasAuthHeader) {
-      return Optional::empty;
+      return Optional.empty();
     }
 
     final String authHeader = request.header(HttpHeaders.AUTHORIZATION).get();
@@ -258,7 +253,7 @@ public final class Middlewares {
           .withReasonPhrase("Authorization token is invalid")));
     }
 
-    return () -> Optional.of(googleIdToken);
+    return Optional.of(googleIdToken);
   }
 
   private static Map<String, String> hideSensitiveHeaders(Map<String, String> headers) {
@@ -274,7 +269,7 @@ public final class Middlewares {
   public static <T> Middleware<AsyncHandler<Response<T>>, AsyncHandler<Response<T>>> authValidator(
       GoogleIdTokenValidator validator) {
     return h -> rc -> {
-      if (!"GET".equals(rc.request().method()) && !auth(rc, validator).user().isPresent()) {
+      if (!"GET".equals(rc.request().method()) && !auth(rc, validator).isPresent()) {
         return completedFuture(
             Response.forStatus(Status.UNAUTHORIZED.withReasonPhrase("Unauthorized access")));
       }
